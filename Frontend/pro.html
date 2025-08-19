@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Add/Edit Subscription</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <h1 id="formTitle">Add Subscription</h1>
+  <form id="subscriptionForm">
+    <input type="hidden" id="subscriptionId" />
+    <div>
+      <label for="serviceName">Service Name:</label>
+      <input type="text" id="serviceName" name="service_name" required />
+    </div>
+    <div>
+      <label for="amount">Subscription Amount:</label>
+      <input type="number" id="amount" name="amount" step="0.01" required />
+    </div>
+    <div>
+      <label for="billingDate">Billing Date:</label>
+      <input type="date" id="billingDate" name="billing_date" required />
+    </div>
+    <div>
+      <label for="durationDays">Subscription Duration (Days):</label>
+      <input type="number" id="durationDays" name="duration_days" min="1" required />
+    </div>
+    <div>
+      <label for="status">Status:</label>
+      <select id="status" name="status" required>
+        <option value="Active">Active</option>
+        <option value="Expired">Expired</option>
+      </select>
+    </div>
+    <div>
+      <label for="userEmail">User Email:</label>
+      <input type="email" id="userEmail" name="user_email" />
+    </div>
+    <button type="submit">Save</button>
+    <button type="button" id="cancelBtn">Cancel</button>
+  </form>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      const urlParams = new URLSearchParams(window.location.search);
+      const subscriptionId = urlParams.get('id');
+      const formTitle = document.getElementById('formTitle');
+      const subscriptionForm = document.getElementById('subscriptionForm');
+      const cancelBtn = document.getElementById('cancelBtn');
+
+        if (subscriptionId) {
+          formTitle.textContent = 'Edit Subscription';
+          // Fetch subscription data and fill form
+          const token = localStorage.getItem('token');
+          fetch('http://localhost:3000/api/subscriptions', {
+            headers: {
+              'Authorization': `Bearer ${token}`
+            }
+          })
+            .then(res => {
+              if (!res.ok) {
+                throw new Error('Failed to fetch subscriptions');
+              }
+              return res.json();
+            })
+            .then(data => {
+              const sub = data.find(s => s.id == subscriptionId);
+              if (sub) {
+                document.getElementById('subscriptionId').value = sub.id;
+                console.log('Loaded subscriptionId:', sub.id);
+                document.getElementById('serviceName').value = sub.service_name;
+                document.getElementById('amount').value = sub.amount;
+                document.getElementById('billingDate').value = sub.billing_date;
+                document.getElementById('durationDays').value = sub.duration_days || 30;
+                document.getElementById('status').value = sub.status;
+                document.getElementById('userEmail').value = sub.user_email || '';
+              }
+            })
+            .catch(err => {
+              console.error('Error fetching subscriptions:', err);
+              alert('Error fetching subscription data. Please login again.');
+              window.location.href = 'index.html';
+            });
+        }
+
+      subscriptionForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const id = document.getElementById('subscriptionId').value;
+        console.log('Form submit, subscription id:', id);
+        const service_name = document.getElementById('serviceName').value;
+        const amount = parseFloat(document.getElementById('amount').value);
+        const billing_date = document.getElementById('billingDate').value;
+        const status = document.getElementById('status').value;
+        const user_email = document.getElementById('userEmail').value;
+        const duration_days = parseInt(document.getElementById('durationDays').value, 10);
+
+const payload = { service_name, amount, billing_date, status, user_email, duration_days };
+
+// Log the payload to the console
+console.log('Payload being sent:', payload);
+
+        if (id) {
+          // Update subscription
+          console.log('Updating subscription with id:', id);
+          const token = localStorage.getItem('token');
+          const url = `http://localhost:3000/api/subscriptions/${id}`;
+          console.log('PUT request URL:', url);
+          fetch(url, {
+            method: 'PUT',
+            headers: { 
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify(payload)
+          })
+          .then(res => {
+            console.log('PUT response status:', res.status);
+            return res.json();
+          })
+          .then(() => {
+            alert('Subscription updated successfully');
+            window.location.href = 'index.html';
+          })
+          .catch(err => alert('Error updating subscription: ' + err));
+        } else {
+          // Add new subscription
+          console.log('Adding new subscription');
+          const token = localStorage.getItem('token');
+          fetch('http://localhost:3000/api/subscriptions', {
+            method: 'POST',
+            headers: { 
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify(payload)
+          })
+          .then(res => {
+            if (!res.ok) {
+              return res.text().then(text => { throw new Error(text || 'Unknown error'); });
+            }
+            return res.json();
+          })
+          .then(() => {
+            alert('Subscription added successfully');
+            window.location.href = 'index.html';
+          })
+          .catch(err => alert('Error adding subscription: ' + err.message));
+        }
+      });
+
+      cancelBtn.addEventListener('click', () => {
+        window.location.href = 'index.html';
+      });
+    });
+  </script>
+</body>
+</html>

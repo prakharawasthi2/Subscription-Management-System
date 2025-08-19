@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Add/Edit Subscription</title>
+  <link rel="stylesheet" href="Css/style.css" />
+</head>
+<body>
+  <h1 id="formTitle">Add Subscription</h1>
+  <form id="subscriptionForm">
+    <input type="hidden" id="subscriptionId" />
+    <div>
+      <label for="serviceName">Service Name:</label>
+      <input type="text" id="serviceName" name="service_name" required />
+    </div>
+    <div>
+      <label for="amount">Subscription Amount:</label>
+      <input type="number" id="amount" name="amount" step="0.01" required />
+    </div>
+    <div>
+      <label for="billingDate">Billing Date:</label>
+      <input type="date" id="billingDate" name="billing_date" required />
+    </div>
+    <div>
+      <label for="status">Status:</label>
+      <select id="status" name="status" required>
+        <option value="Active">Active</option>
+        <option value="Expired">Expired</option>
+      </select>
+    </div>
+    <div>
+      <label for="userEmail">User Email:</label>
+      <input type="email" id="userEmail" name="user_email" />
+    </div>
+    <button type="submit">Save</button>
+    <button type="button" id="cancelBtn">Cancel</button>
+  </form>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      const urlParams = new URLSearchParams(window.location.search);
+      const subscriptionId = urlParams.get('id');
+      const formTitle = document.getElementById('formTitle');
+      const subscriptionForm = document.getElementById('subscriptionForm');
+      const cancelBtn = document.getElementById('cancelBtn');
+
+      if (subscriptionId) {
+        formTitle.textContent = 'Edit Subscription';
+        // Fetch subscription data and fill form
+        fetch('/api/subscriptions')
+          .then(res => res.json())
+          .then(data => {
+            const sub = data.find(s => s.id == subscriptionId);
+            if (sub) {
+              document.getElementById('subscriptionId').value = sub.id;
+              document.getElementById('serviceName').value = sub.service_name;
+              document.getElementById('amount').value = sub.amount;
+              document.getElementById('billingDate').value = sub.billing_date;
+              document.getElementById('status').value = sub.status;
+              document.getElementById('userEmail').value = sub.user_email || '';
+            }
+          });
+      }
+
+      subscriptionForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const id = document.getElementById('subscriptionId').value;
+        const service_name = document.getElementById('serviceName').value;
+        const amount = parseFloat(document.getElementById('amount').value);
+        const billing_date = document.getElementById('billingDate').value;
+        const status = document.getElementById('status').value;
+        const user_email = document.getElementById('userEmail').value;
+
+        const payload = { service_name, amount, billing_date, status, user_email };
+
+        if (id) {
+          // Update subscription
+          fetch('/api/subscriptions/' + id, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          })
+          .then(res => res.json())
+          .then(() => {
+            alert('Subscription updated successfully');
+            window.location.href = 'index.html';
+          })
+          .catch(err => alert('Error updating subscription: ' + err));
+        } else {
+          // Add new subscription
+          fetch('/api/subscriptions', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          })
+          .then(res => res.json())
+          .then(() => {
+            alert('Subscription added successfully');
+            window.location.href = 'index.html';
+          })
+          .catch(err => alert('Error adding subscription: ' + err));
+        }
+      });
+
+      cancelBtn.addEventListener('click', () => {
+        window.location.href = 'index.html';
+      });
+    });
+  </script>
+</body>
+</html>

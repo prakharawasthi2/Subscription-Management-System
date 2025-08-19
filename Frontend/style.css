@@ -1,0 +1,161 @@
+/* Base styles */
+body {
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  margin: 0;
+  padding: 0;
+  background: linear-gradient(135deg, #779cd3, #191414);
+  color: #FFFFFF;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Header styles */
+header {
+  background-color: #111111; /* Dark background similar to Netflix */
+  padding: 20px;
+  text-align: center;
+  color: #FFFFFF;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.5);
+}
+
+header h1 {
+  margin: 0;
+  font-size: 2rem;
+  font-weight: bold;
+}
+
+/* Navigation styles */
+nav a {
+  color: #FFFFFF;
+  margin: 0 15px;
+  text-decoration: none;
+  font-weight: 600;
+  transition: color 0.3s ease;
+}
+
+nav a:hover {
+  color: #FF0000; /* Netflix red on hover */
+}
+
+/* Main content styles */
+main {
+  flex: 1;
+  padding: 20px;
+  background-color: #121212; 
+  border-radius: 8px;
+  max-width: 500px;
+  margin: 20px auto;
+  box-shadow: 0 4px 10px rgba(0,0,0,0.7);
+  border: 2px solid #13b4e6;
+}
+
+/* Section styles */
+.content-section {
+  margin-bottom: 40px;
+}
+
+.content-section h2 {
+  border-bottom: 2px solid #1DB954;
+  padding-bottom: 10px;
+  margin-bottom: 20px;
+  font-weight: 700;
+}
+
+/* Form styles */
+form label {
+  display: block;
+  margin-bottom: 6px;
+  font-weight: 600;
+}
+
+form input[type="text"],
+form input[type="email"],
+form input[type="password"],
+form input[type="number"],
+form input[type="date"],
+form select {
+  width: 50%;
+  padding: 8px 10px;
+  margin-bottom: 15px;
+  border: none;
+  border-radius: 4px;
+  background-color: #282828;
+  color: #FFFFFF;
+  font-size: 1rem;
+}
+
+form input[type="checkbox"] {
+  margin-right: 8px;
+}
+
+form button {
+  background-color: #1DB954;
+  color: #FFFFFF;
+  border: none;
+  padding: 10px 20px;
+  font-weight: 700;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background-color 0.3s ease;
+}
+
+form button:hover {
+  background-color: #1ed760;
+}
+
+/* List styles */
+ul {
+  list-style-type: none;
+  padding-left: 0;
+}
+
+li {
+  background-color: #282828;
+  margin-bottom: 10px;
+  padding: 12px 15px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: #FFFFFF;
+}
+
+li button {
+  margin-left: 10px;
+  background-color: #FF0000; /* Netflix red for delete */
+  border: none;
+  padding: 6px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  color: #FFFFFF;
+  font-weight: 600;
+  transition: background-color 0.3s ease;
+}
+
+li button:hover {
+  background-color: #cc0000;
+}
+
+/* Info and error messages */
+.info-message {
+  color: #1DB954;
+  font-weight: 600;
+  margin-top: 10px;
+}
+
+.error-message {
+  color: #FF0000;
+  font-weight: 600;
+  margin-top: 10px;
+}
+
+/* Footer styles */
+footer {
+  background-color: #111111;
+  color: #FFFFFF;
+  text-align: center;
+  padding: 15px 0;
+  font-size: 0.9rem;
+  box-shadow: 0 -2px 4px rgba(0,0,0,0.5);
+}

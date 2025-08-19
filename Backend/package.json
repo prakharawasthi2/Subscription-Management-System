@@ -1,0 +1,19 @@
+{
+  "name": "subscription-management-backend",
+  "version": "1.0.0",
+  "description": "Backend for Subsription Management System",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+     "bcrypt": "^5.1.0",
+    "body-parser": "^2.2.0",
+    "cors": "^2.8.5",
+    "express": "^5.1.0",
+    "jsonwebtoken": "^9.0.2",
+    "mysql2": "^3.14.3",
+    "node-cron": "^4.2.1",
+    "nodemailer": "^7.0.5"
+  }
+}

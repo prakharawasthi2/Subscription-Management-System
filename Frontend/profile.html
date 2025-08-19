@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>User Profile</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header>
+    <h1>User Profile</h1>
+    <nav>
+      <a href="index.html#active-subscriptions">Active Subscriptions</a> |
+      <a href="index.html#upcoming-payments">Upcoming Payments</a> |
+      <a href="index.html#settings">Settings</a> |
+      <a href="index.html#login-section" id="logout-link">Logout</a>
+    </nav>
+  </header>
+
+  <main>
+    <section id="profile-section" style="max-width: 600px; margin: 0 auto; padding: 20px; background-color: #282828; border-radius: 10px; box-shadow: 0 4px 12px rgba(0,0,0,0.7);">
+      <h2>Profile Information</h2>
+      <div style="display: flex; flex-direction: column; gap: 12px;">
+        <div style="display: flex; justify-content: space-between; max-width: 400px;">
+          <strong>Name:</strong>
+          <span id="profile-name"></span>
+        </div>
+        <div style="display: flex; justify-content: space-between; max-width: 400px;">
+          <strong>Email:</strong>
+          <span id="profile-email"></span>
+        </div>
+        <div style="display: flex; justify-content: space-between; max-width: 400px;">
+          <strong>Email Reminders Enabled:</strong>
+          <span id="profile-email-reminders"></span>
+        </div>
+        <div style="display: flex; justify-content: space-between; max-width: 400px;">
+          <strong>Account Created:</strong>
+          <span id="profile-created-at"></span>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <p>© 2024 Subscription Management System</p>
+  </footer>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', async () => {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        alert('You must be logged in to view your profile.');
+        window.location.href = 'index.html#login-section';
+        return;
+      }
+
+      try {
+        const response = await fetch('http://localhost:3000/api/profile', {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+        if (!response.ok) {
+          throw new Error('Failed to fetch profile data');
+        }
+        const profile = await response.json();
+        document.getElementById('profile-name').textContent = profile.name;
+        document.getElementById('profile-email').textContent = profile.email;
+        document.getElementById('profile-email-reminders').textContent = profile.email_reminders_enabled ? 'Yes' : 'No';
+        document.getElementById('profile-created-at').textContent = new Date(profile.created_at).toLocaleDateString();
+      } catch (error) {
+        alert(error.message);
+        window.location.href = 'index.html#login-section';
+      }
+
+      // Logout link clears localStorage and redirects to login
+      document.getElementById('logout-link').addEventListener('click', () => {
+        localStorage.removeItem('token');
+        localStorage.removeItem('userLoggedIn');
+        window.location.href = 'index.html#login-section';
+      });
+    });
+  </script>
+</body>
+</html>
