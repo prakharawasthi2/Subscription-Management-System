@@ -4,13 +4,15 @@ const cors = require('cors');
 const bcrypt = require('bcrypt');
 const mysql = require('mysql2');
 const jwt = require('jsonwebtoken');
+const nodemailer = require('nodemailer');
+const cron = require('node-cron');
 
 const app = express();
 const PORT = 3000;
 const JWT_SECRET = 'your_jwt_secret_key';
 
 const corsOptions = {
-  origin: ['http://127.0.0.1:5500', 'http://localhost:5500'], // Allow both localhost and 127.0.0.1 for frontend
+  origin: ['http://127.0.0.1:5500', 'http://localhost:5500'],
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
@@ -22,20 +24,23 @@ app.use(cors(corsOptions));
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 
-// MySQL connection
-const db = mysql.createConnection({
+// MySQL connection pool
+const db = mysql.createPool({
   host: 'localhost',
   user: 'root',
   password: 'prakhar@2006',
-  database: 'subscription_management'
+  database: 'subscription_management',
+  connectionLimit: 10
 });
 
-db.connect(err => {
+// Test the connection
+db.getConnection((err, connection) => {
   if (err) {
     console.error('Database connection failed:', err);
     return;
   }
   console.log('Connected to MySQL database.');
+  connection.release();
 });
 
 const saltRounds = 10;
@@ -128,72 +133,154 @@ app.post('/api/settings', authenticateToken, (req, res) => {
   );
 });
 
-const nodemailer = require('nodemailer');
-
 // Configure nodemailer transporter (using Gmail SMTP as example)
-require('dotenv').config();
+require('dotenv').config({ path: __dirname + '/.env' });
 
-const transporter = nodemailer.createTransport({
-  service: 'gmail',
-  auth: {
-    user: process.env.EMAIL_USER, // Email address from environment variable
-    pass: process.env.EMAIL_PASS  // Email password or app password from environment variable
+// Email configuration validation
+let transporter;
+let emailConfigured = false;
+
+try {
+  if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
+    console.error('❌ Email configuration missing: EMAIL_USER and EMAIL_PASS environment variables are required');
+    console.log('ℹ️  Please check your .env file or set the environment variables');
+  } else {
+    transporter = nodemailer.createTransport({
+      service: 'gmail',
+      auth: {
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASS
+      }
+    });
+    
+    // Verify email configuration
+    transporter.verify((error, success) => {
+      if (error) {
+        console.error('❌ Email configuration error:', error);
+        console.log('ℹ️  Make sure to use an app password if you have 2FA enabled on Gmail');
+        console.log('ℹ️  Check: https://support.google.com/accounts/answer/185833');
+      } else {
+        console.log('✅ Email server is ready to send messages');
+        emailConfigured = true;
+      }
+    });
   }
-});
-
-// Function to send reminder email
-function sendReminderEmail(toEmail, serviceName, endDate) {
-  const mailOptions = {
-    from: 'your_email@gmail.com', // TODO: replace with your email
-    to: toEmail,
-    subject: `Subscription Expiry Reminder for ${serviceName}`,
-    text: `Dear user,\n\nYour subscription for ${serviceName} is going to expire on ${endDate}. Please recharge it before the expiry date to continue enjoying the service.\n\nBest regards,\nSubscription Management Team`
-  };
-
-  transporter.sendMail(mailOptions, (error, info) => {
-    if (error) {
-      console.error('Error sending reminder email:', error);
-    } else {
-      console.log('Reminder email sent:', info.response);
-    }
-  });
+} catch (error) {
+  console.error('❌ Failed to configure email transporter:', error);
 }
 
-// Function to check for subscriptions expiring in 7 days and send reminders
-function checkAndSendReminders() {
-  const query = `
-    SELECT s.id, s.service_name, s.end_date, u.email, u.email_reminders_enabled
-    FROM subscriptions s
-    JOIN users u ON s.user_id = u.id
-    WHERE s.status = 'Active'
-  `;
+// Function to send reminder email with improved error handling
+function sendReminderEmail(toEmail, serviceName, endDate) {
+  if (!emailConfigured) {
+    console.error('❌ Cannot send email: Email service not configured properly');
+    return false;
+  }
 
-  db.query(query, (err, results) => {
-    if (err) {
-      console.error('Error fetching subscriptions for reminders:', err);
-      return;
-    }
+  const mailOptions = {
+    from: process.env.EMAIL_USER || 'subscription@management.com',
+    to: toEmail,
+    subject: `Subscription Expiry Reminder for ${serviceName}`,
+    text: `Dear user,\n\nYour subscription for ${serviceName} is going to expire on ${endDate}. Please recharge it before the expiry date to continue enjoying the service.\n\nBest regards,\nSubscription Management Team`,
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <h2 style="color: #333;">Subscription Expiry Reminder</h2>
+        <p>Dear user,</p>
+        <p>Your subscription for <strong>${serviceName}</strong> is going to expire on <strong>${endDate}</strong>.</p>
+        <p>Please recharge it before the expiry date to continue enjoying the service.</p>
+        <p>Best regards,<br>Subscription Management Team</p>
+      </div>
+    `
+  };
 
-    const today = new Date();
-    results.forEach(sub => {
-      if (!sub.end_date) return;
-      if (!sub.email_reminders_enabled) return;
-      const endDate = new Date(sub.end_date);
-      const diffTime = endDate - today;
-      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-      if (diffDays <= 7 && diffDays >= 0) {
-        console.log(`Sending reminder email to ${sub.email} for subscription ${sub.service_name} expiring in ${diffDays} days.`);
-        sendReminderEmail(sub.email, sub.service_name, sub.end_date);
+  return new Promise((resolve) => {
+    transporter.sendMail(mailOptions, (error, info) => {
+      if (error) {
+        console.error('❌ Error sending reminder email to', toEmail, ':', error.message);
+        if (error.responseCode === 535) {
+          console.log('ℹ️  Authentication failed - check your email credentials');
+        }
+        resolve(false);
+      } else {
+        console.log('✅ Reminder email sent to', toEmail, ':', info.response);
+        if (process.env.DEBUG_EMAILS === 'true') {
+          console.log('📧 Email details:', {
+            to: toEmail,
+            subject: mailOptions.subject,
+            messageId: info.messageId
+          });
+        }
+        resolve(true);
       }
     });
   });
 }
 
-const cron = require('node-cron');
+// Function to check for subscriptions expiring in 7 days and send reminders
+async function checkAndSendReminders() {
+  console.log('🔍 Checking for subscriptions expiring within 7 days...');
+  
+  const query = `
+    SELECT s.id, s.service_name, s.end_date, u.email, u.email_reminders_enabled, u.name as user_name
+    FROM subscriptions s
+    JOIN users u ON s.user_id = u.id
+    WHERE s.status = 'Active'
+  `;
+
+  db.query(query, async (err, results) => {
+    if (err) {
+      console.error('❌ Error fetching subscriptions for reminders:', err);
+      return;
+    }
+
+    console.log(`📊 Found ${results.length} active subscriptions to check`);
+
+    const today = new Date();
+    let remindersSent = 0;
+    let eligibleSubscriptions = 0;
+
+    for (const sub of results) {
+      if (!sub.end_date) {
+        console.log(`⚠️  Subscription ${sub.id} (${sub.service_name}) has no end date`);
+        continue;
+      }
+
+      if (!sub.email_reminders_enabled) {
+        console.log(`ℹ️  User ${sub.email} has email reminders disabled`);
+        continue;
+      }
+
+      const endDate = new Date(sub.end_date);
+      const diffTime = endDate - today;
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+      
+      if (diffDays <= 7 && diffDays >= 0) {
+        eligibleSubscriptions++;
+        console.log(`📨 Eligible: ${sub.service_name} for ${sub.email} expires in ${diffDays} days`);
+        
+        try {
+          const emailSent = await sendReminderEmail(sub.email, sub.service_name, sub.end_date);
+          if (emailSent) {
+            remindersSent++;
+            // Update last reminder sent date
+            db.query('UPDATE subscriptions SET last_reminder_sent = NOW() WHERE id = ?', [sub.id]);
+          }
+        } catch (error) {
+          console.error(`❌ Failed to send email to ${sub.email}:`, error);
+        }
+      } else if (diffDays < 0) {
+        console.log(`⏰ Subscription ${sub.service_name} for ${sub.email} expired ${Math.abs(diffDays)} days ago`);
+        // Update status to Expired
+        db.query('UPDATE subscriptions SET status = "Expired" WHERE id = ? AND status = "Active"', [sub.id]);
+      }
+    }
+
+    console.log(`✅ Reminder check completed: ${remindersSent} emails sent out of ${eligibleSubscriptions} eligible subscriptions`);
+  });
+}
 
 // Schedule the reminder check to run every day at 9:00 AM
 cron.schedule('0 9 * * *', () => {
-  console.log('Running daily subscription reminder check at 9:00 AM');
+  console.log('⏰ Running daily subscription reminder check at 9:00 AM');
   checkAndSendReminders();
 });
 
@@ -212,10 +299,74 @@ app.get('/api/profile', authenticateToken, (req, res) => {
   });
 });
 
-// Manual trigger endpoint for email reminders (for testing)
-app.get('/api/trigger-email-reminders', (req, res) => {
-  checkAndSendReminders();
-  res.json({ message: 'Email reminder check triggered' });
+// Enhanced manual trigger endpoint for email reminders with detailed feedback
+app.get('/api/trigger-email-reminders', async (req, res) => {
+  console.log('🚀 Manual email reminder trigger requested');
+  try {
+    await checkAndSendReminders();
+    res.json({ 
+      message: 'Email reminder check completed successfully',
+      status: 'success',
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('❌ Error in manual email trigger:', error);
+    res.status(500).json({ 
+      message: 'Error triggering email reminders',
+      status: 'error',
+      error: error.message 
+    });
+  }
+});
+
+// Test email endpoint for manual testing
+app.post('/api/test-email', (req, res) => {
+  const { email } = req.body;
+  
+  if (!email) {
+    return res.status(400).json({ message: 'Email address is required' });
+  }
+
+  if (!emailConfigured) {
+    return res.status(500).json({ 
+      message: 'Email service not configured properly',
+      details: 'Check your .env file for EMAIL_USER and EMAIL_PASS variables'
+    });
+  }
+
+  const testMailOptions = {
+    from: process.env.EMAIL_USER,
+    to: email,
+    subject: 'Test Email - Subscription Management System',
+    text: 'This is a test email from your Subscription Management System. If you received this, your email configuration is working correctly!',
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <h2 style="color: #333;">Test Email Successful! 🎉</h2>
+        <p>This is a test email from your Subscription Management System.</p>
+        <p>If you received this email, your email configuration is working correctly!</p>
+        <p><strong>Timestamp:</strong> ${new Date().toISOString()}</p>
+        <p>Best regards,<br>Subscription Management Team</p>
+      </div>
+    `
+  };
+
+  transporter.sendMail(testMailOptions, (error, info) => {
+    if (error) {
+      console.error('❌ Test email failed:', error);
+      res.status(500).json({ 
+        message: 'Test email failed to send',
+        error: error.message,
+        details: 'Check your email credentials and ensure you\'re using an app password if 2FA is enabled'
+      });
+    } else {
+      console.log('✅ Test email sent successfully:', info.response);
+      res.json({ 
+        message: 'Test email sent successfully!',
+        response: info.response,
+        details: 'Check your inbox (and spam folder) for the test email'
+      });
+    }
+  });
 });
 
 // Get subscriptions expiring within 7 days for authenticated user
@@ -233,12 +384,6 @@ app.get('/api/subscriptions/upcoming', authenticateToken, (req, res) => {
     }
     res.json(results);
   });
-});
-
-// Manual trigger endpoint for email reminders (for testing)
-app.get('/api/trigger-email-reminders', (req, res) => {
-  checkAndSendReminders();
-  res.json({ message: 'Email reminder check triggered' });
 });
 
 // Add new subscription
@@ -266,11 +411,43 @@ app.post('/api/subscriptions', authenticateToken, (req, res) => {
     const end_date = endDateObj.toISOString().split('T')[0];
 
     const insertQuery = 'INSERT INTO subscriptions (user_id, service_name, amount, billing_date, status, start_date, end_date, duration_days) VALUES (?, ?, ?, ?, ?, ?, ?, ?)';
-    db.query(insertQuery, [user_id, service_name, amount, billing_date, status, start_date, end_date, duration_days], (err, results) => {
+    db.query(insertQuery, [user_id, service_name, amount, billing_date, status, start_date, end_date, duration_days], async (err, results) => {
       if (err) {
         console.error('Database error inserting subscription:', err);
         return res.status(500).json({ message: 'Database error inserting subscription' });
       }
+      
+      // Check if subscription expires within 7 days and send immediate reminder
+      const today = new Date();
+      const endDate = new Date(end_date);
+      const diffTime = endDate - today;
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+      
+      if (diffDays <= 7 && diffDays >= 0) {
+        console.log(`📨 New subscription expires in ${diffDays} days - sending immediate reminder`);
+        
+        // Get user email and preferences
+        db.query('SELECT email, email_reminders_enabled FROM users WHERE id = ?', [user_id], async (err, userResults) => {
+          if (err) {
+            console.error('Error fetching user details for immediate reminder:', err);
+            return;
+          }
+          
+          if (userResults.length > 0 && userResults[0].email_reminders_enabled) {
+            try {
+              const emailSent = await sendReminderEmail(userResults[0].email, service_name, end_date);
+              if (emailSent) {
+                console.log('✅ Immediate reminder email sent successfully');
+                // Update last reminder sent date
+                db.query('UPDATE subscriptions SET last_reminder_sent = NOW() WHERE id = ?', [results.insertId]);
+              }
+            } catch (error) {
+              console.error('❌ Failed to send immediate reminder email:', error);
+            }
+          }
+        });
+      }
+      
       res.status(201).json({ message: 'Subscription added successfully' });
     });
   });
@@ -303,11 +480,43 @@ app.put('/api/subscriptions/:id', authenticateToken, (req, res) => {
     const end_date = endDateObj.toISOString().split('T')[0];
 
     const updateQuery = 'UPDATE subscriptions SET user_id = ?, service_name = ?, amount = ?, billing_date = ?, status = ?, start_date = ?, end_date = ?, duration_days = ? WHERE id = ?';
-    db.query(updateQuery, [user_id, service_name, amount, billing_date, status, start_date, end_date, duration_days, subscriptionId], (err, results) => {
+    db.query(updateQuery, [user_id, service_name, amount, billing_date, status, start_date, end_date, duration_days, subscriptionId], async (err, results) => {
       if (err) {
         console.error('Database error updating subscription:', err);
         return res.status(500).json({ message: 'Database error updating subscription' });
       }
+      
+      // Check if updated subscription expires within 7 days and send immediate reminder
+      const today = new Date();
+      const endDate = new Date(end_date);
+      const diffTime = endDate - today;
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+      
+      if (diffDays <= 7 && diffDays >= 0) {
+        console.log(`📨 Updated subscription expires in ${diffDays} days - sending immediate reminder`);
+        
+        // Get user email and preferences
+        db.query('SELECT email, email_reminders_enabled FROM users WHERE id = ?', [user_id], async (err, userResults) => {
+          if (err) {
+            console.error('Error fetching user details for immediate reminder:', err);
+            return;
+          }
+          
+          if (userResults.length > 0 && userResults[0].email_reminders_enabled) {
+            try {
+              const emailSent = await sendReminderEmail(userResults[0].email, service_name, end_date);
+              if (emailSent) {
+                console.log('✅ Immediate reminder email sent successfully for updated subscription');
+                // Update last reminder sent date
+                db.query('UPDATE subscriptions SET last_reminder_sent = NOW() WHERE id = ?', [subscriptionId]);
+              }
+            } catch (error) {
+              console.error('❌ Failed to send immediate reminder email for updated subscription:', error);
+            }
+          }
+        });
+      }
+      
       res.json({ message: 'Subscription updated successfully' });
     });
   });
